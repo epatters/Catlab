@@ -5,7 +5,7 @@ this module to enable the simple but flexible construction of syntax systems.
 """
 module Syntax
 export @syntax, GATExpr, SyntaxDomainError, head, args, first, last,
-  gat_typeof, gat_type_args, invoke_term, functor,
+  gat_typeof, gat_type_args, invoke_term, functor, @theory_map, AbstractTheoryMap, gatmap,
   to_json_sexpr, parse_json_sexpr, show_sexpr, show_unicode, show_latex
 
 import Base: first, last
@@ -404,6 +404,90 @@ function functor(types::Tuple, expr::GATExpr;
   # Invoke the constructor in the codomain category!
   theory_type = syntax_module(expr).theory()
   invoke_term(theory_type, types, name, term_args...)
+end
+
+abstract type AbstractTheoryMap end
+
+function gatmap(T::AbstractTheoryMap, x::GATExpr) end
+
+macro theory_map(head)
+  map_name, theory_name, expr_types, dict_impl_name = @match head begin
+    Expr(:call, map_name::Symbol, Expr(:call, theory_name::Symbol, expr_types...)) =>
+      (map_name, theory_name, expr_types, nothing)
+    Expr(:tuple,
+         Expr(:call, map_name::Symbol, Expr(:call, theory_name::Symbol, expr_types...)),
+         Expr(:call, :(=>), :dict_impl, dict_impl_name::Symbol)) =>
+           (map_name, theory_name, expr_types, dict_impl_name)
+    _ => throw(ParseError("ill-formed @theory_map head $head"))
+  end
+
+  expr = :(theory_map_code($(Expr(:quote, map_name)), GAT.theory($(esc(theory_name))),
+                           $(Expr(:quote, theory_name)), $expr_types, $(Expr(:quote, dict_impl_name))))
+  Expr(:block,
+       Expr(:call, esc(:eval), expr),
+       :(Core.@__doc__ $(esc(map_name))))
+end
+
+function theory_map_code(map_name, theory, theory_name, expr_types, dict_impl_name)
+  expr_type_lookup = Dict()
+  for i in 1:length(theory.types)
+    expr_type_lookup[theory.types[i].name] = expr_types[i]
+  end
+
+  code = Expr(:block,
+              Expr(:abstract, :($map_name <: AbstractTheoryMap)),
+              :(function dom(f::$map_name)::$theory_name end),
+              :(function codom(f::$map_name)::$theory_name end))
+
+  function term_type_name(tc)
+    @match tc.typ begin
+      Expr(:call, ty::Symbol, args...) => ty
+      ty::Symbol => ty
+      _ => throw(ParseError("ill-formed term constructor $tc"))
+    end
+  end
+
+  for tc in theory.terms
+    push!(code.args, map_term_constructor(map_name, tc.name, expr_type_lookup[term_type_name(tc)]))
+  end
+
+  if dict_impl_name != nothing
+    push!(code.args, dict_map_code(map_name, theory, theory_name, expr_types, dict_impl_name))
+  end
+
+  code
+end
+
+function map_term_constructor(map_name::Symbol, term_constructor::Symbol, term_type::Symbol)
+  quote
+    function Syntax.gatmap(F::$map_name, x::$term_type{$(Expr(:quote, term_constructor))})
+      $term_constructor(map(y -> gatmap(F,y), x.args))
+    end
+  end
+end
+
+to_struct_attr(ty::Symbol) = Symbol("$(lowercase(String(ty)))_map")
+
+function dict_map_code(map_name::Symbol, theory, theory_name, expr_types, dict_impl_name)
+  # FIXME: Really, the dom and codomain should be presentations of a free category,
+  # but this is in the wrong module for that
+  struct_members = [:(dom::Any), :(codom::Any)]
+  for (ty, expr_ty) in zip(theory.types, expr_types)
+    push!(struct_members, :($(to_struct_attr(ty.name))::Dict{Symbol,$expr_ty}))
+  end
+  struct_code = Expr(:struct, false,
+                     Expr(:(<:), dict_impl_name, map_name),
+                     Expr(:block, struct_members...))
+  struct_implementations = map(zip(theory.types, expr_types)) do (ty, expr_ty)
+    quote
+      function Syntax.gatmap(F::$dict_impl_name, x::$expr_ty{:generator})
+        F.$(to_struct_attr(ty.name))[x.args[1]]
+      end
+    end
+  end
+  Expr(:block,
+       struct_code,
+       struct_implementations...)
 end
 
 # Serialization

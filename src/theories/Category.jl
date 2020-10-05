@@ -1,4 +1,4 @@
-export Category, FreeCategory, Ob, Hom, dom, codom, id, compose, ⋅,
+export Category, FreeCategory, AbstractFunctor, DictFunctor, Ob, Hom, dom, codom, id, compose, ⋅,
   Category2, FreeCategory2, Hom2, compose2
 
 import Base: show
@@ -46,6 +46,8 @@ compose(f, g, h, fs...) = compose([f, g, h, fs...])
 @syntax FreeCategory{ObExpr,HomExpr} Category begin
   compose(f::Hom, g::Hom) = associate(new(f,g; strict=true))
 end
+
+@theory_map AbstractFunctor(Category(ObExpr, HomExpr)), dict_impl => DictFunctor
 
 function show_unicode(io::IO, expr::HomExpr{:compose}; kw...)
   Syntax.show_unicode_infix(io, expr, "⋅"; kw...)

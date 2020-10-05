@@ -1,5 +1,6 @@
 export MonoidalCategory, otimes, munit, ⊗, collect, ndims,
   SymmetricMonoidalCategory, FreeSymmetricMonoidalCategory, braid, σ,
+  AbstractSymmetricMonoidalFunctor, DictSymmetricMonoidalFunctor,
   MonoidalCategoryWithDiagonals, CartesianCategory, FreeCartesianCategory,
   mcopy, delete, pair, proj1, proj2, Δ, ◊,
   mmerge, create, copair, coproj1, coproj2, ∇, □,
@@ -101,6 +102,9 @@ end
   otimes(f::Hom, g::Hom) = associate(new(f,g))
   compose(f::Hom, g::Hom) = associate(new(f,g; strict=true))
 end
+
+@theory_map AbstractSymmetricMonoidalFunctor(SymmetricMonoidalCategory(ObExpr,HomExpr)),
+  dict_impl => DictSymmetricMonoidalFunctor
 
 function show_latex(io::IO, expr::HomExpr{:braid}; kw...)
   Syntax.show_latex_script(io, expr, "\\sigma")
