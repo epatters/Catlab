@@ -18,7 +18,7 @@ using ...Meta, ...Present
 using ...Syntax: GATExpr, args
 using ...Theories: Schema, FreeSchema, SchemaType,
   CatDesc, CatDescType, ob, hom, dom, codom, codom_num,
-  AttrDesc, AttrDescType, data, attr, adom, acodom, data_num, attrs_by_codom
+  AttrDesc, AttrDescType, attr_type, attr, adom, acodom, attr_type_num, attrs_by_codom
 
 
 # Data types
@@ -29,8 +29,8 @@ using ...Theories: Schema, FreeSchema, SchemaType,
 The type parameters are:
 
 - `CD`: indexing category C, encoded as a type
-- `AD`: data types and data attributes, encoded as a type
-- `Ts`: Julia types corresponding to data types in schema
+- `AD`: attribute types and attributes, encoded as a type
+- `Ts`: Julia types corresponding to attribute types in schema
 
 Together, the first two type parameters encode a schema, see `Schema`.
 
@@ -95,7 +95,7 @@ const ACSet = AttributedCSet
 To generate a concrete type, use [`ACSetType`](@ref).
 """
 function AbstractACSetType(pres::Presentation{Schema})
-  type_vars = [ TypeVar(nameof(data)) for data in generators(pres, :Data) ]
+  type_vars = [ TypeVar(nameof(attr_type)) for attr_type in generators(pres, :AttrType) ]
   if isempty(type_vars)
     # When the schema has no data attributes, allow subtyping from any schema
     # extending it with attributes.
@@ -115,7 +115,7 @@ By default, no morphisms or data attributes are indexed.
 See also: [`AbstractACSetType`](@ref).
 """
 function ACSetType(pres::Presentation{Schema}; index=[], unique_index=[])
-  type_vars = [ TypeVar(nameof(data)) for data in generators(pres, :Data) ]
+  type_vars = [ TypeVar(nameof(attr_type)) for attr_type in generators(pres, :AttrType) ]
   T = ACSet{SchemaType(pres)..., Tuple{type_vars...},
             Tuple(sort!(index ∪ unique_index)), Tuple(sort!(unique_index))}
   foldr(UnionAll, type_vars, init=T)
@@ -139,7 +139,7 @@ end
 @generated function ACSetTableUnionAll(::Type{X}, ::Type{Val{ob₀}}) where
     {CD<:CatDesc, AD<:AttrDesc{CD}, X<:AbstractACSet{CD,AD}, ob₀}
   CD₀, AD₀ = ACSetTableDesc(CD, AD, ob₀)
-  :(ACSet{$CD₀,$AD₀,Tuple{$(data(AD)...)},(),()} where {$(data(AD)...)})
+  :(ACSet{$CD₀,$AD₀,Tuple{$(attr_type(AD)...)},(),()} where {$(attr_type(AD)...)})
 end
 
 function ACSetTableDesc(::Type{CD}, ::Type{AD}, ob₀::Symbol) where
@@ -148,19 +148,19 @@ function ACSetTableDesc(::Type{CD}, ::Type{AD}, ob₀::Symbol) where
   attrs₀ = [ i for (i,j) in enumerate(adom(AD)) if ob(CD)[j] == ob₀ ]
   adom₀ = Tuple(ones(Int, length(attrs₀)))
   CD₀ = CatDesc{(ob₀,),(),(),()}
-  AD₀ = AttrDesc{CD₀,data(AD),attr(AD)[attrs₀],adom₀,acodom(AD)[attrs₀]}
+  AD₀ = AttrDesc{CD₀,attr_type(AD),attr(AD)[attrs₀],adom₀,acodom(AD)[attrs₀]}
   (CD₀, AD₀)
 end
 
 """ Abstract type for C-sets.
 
-The special case of `AbstractAttributedCSet` with no data attributes.
+The special case of `AbstractAttributedCSet` with no attributes.
 """
 const AbstractCSet{CD} = AbstractACSet{CD,AttrDesc{CD,(),(),(),()},Tuple{}}
 
 """ Data type for C-sets.
 
-The special case of `AttributedCSet` with no data attributes.
+The special case of `AttributedCSet` with no attributes.
 """
 const CSet{CD,Idxed,UniqueIdxed} =
   ACSet{CD,AttrDesc{CD,(),(),(),()},Tuple{},Idxed,UniqueIdxed}
@@ -182,8 +182,8 @@ morphisms are indexed.
 See also: [`AbstractCSetType`](@ref).
 """
 function CSetType(pres::Presentation{Schema}; index=[], unique_index=[])
-  if !(isempty(generators(pres, :Data)) && isempty(generators(pres, :Attr)))
-    error("Use `ACSetType` instead of `CSetType` for schemas with data attributes")
+  if !(isempty(generators(pres, :AttrTypes)) && isempty(generators(pres, :Attr)))
+    error("Use `ACSetType` instead of `CSetType` for schemas with attributes")
   end
   CSet{CatDescType(pres),
        Tuple(sort!(index ∪ unique_index)), Tuple(sort!(unique_index))}
@@ -248,7 +248,7 @@ function Base.show(io::IO, acs::T) where {CD,AD,Ts,T<:AbstractACSet{CD,AD,Ts}}
   println(io, "(")
   join(io, vcat(
     [ "  $ob = 1:$(nparts(acs,ob))" for ob in ob(CD) ],
-    [ "  $data = $(Ts.parameters[i])" for (i, data) in enumerate(data(AD)) ],
+    [ "  $attr_type = $(Ts.parameters[i])" for (i, attr_type) in enumerate(attr_type(AD)) ],
     [ "  $hom : $(dom(CD,i)) → $(codom(CD,i)) = $(subpart(acs,hom))"
       for (i, hom) in enumerate(hom(CD)) ],
     [ "  $attr : $(dom(AD,i)) → $(codom(AD,i)) = $(subpart(acs,attr))"
@@ -318,7 +318,7 @@ has_part(acs::ACSet, type::Symbol) = _has_part(acs, Val{type})
 
 @generated function _has_part(::ACSet{CD,AD}, ::Type{Val{type}}) where
     {CD,AD,type}
-  type ∈ ob(CD) || type ∈ data(AD)
+  type ∈ ob(CD) || type ∈ attr_type(AD)
 end
 
 has_part(acs::ACSet, type::Symbol, part::Int) = 1 <= part <= nparts(acs, type)
@@ -444,7 +444,7 @@ incident(acs::ACSet, part, expr::GATExpr; kw...) =
   elseif name ∈ attr(AD)
     if name ∈ Idxed
       quote
-        indices = get_data_index.(Ref(acs.indices.$name), part)
+        indices = get_attr_index.(Ref(acs.indices.$name), part)
         copy ? Base.copy.(indices) : indices
       end
     else
@@ -781,33 +781,33 @@ function disjoint_union(acs1::T, acs2::T) where {T<:ACSet}
   acs
 end
 
-""" Look up key in C-set data index.
+""" Look up key in C-set attr index.
 """
-get_data_index(d::AbstractDict{K,Int}, k::K) where K = get(d, k, 0)
-get_data_index(d::AbstractDict{K,<:AbstractVector{Int}}, k::K) where K =
+get_attr_index(d::AbstractDict{K,Int}, k::K) where K = get(d, k, 0)
+get_attr_index(d::AbstractDict{K,<:AbstractVector{Int}}, k::K) where K =
   get(d, k, 1:0)
 
-""" Set key and value for C-set data index.
+""" Set key and value for C-set attr index.
 """
-function set_data_index!(d::AbstractDict{K,Int}, k::K, v::Int) where K
+function set_attr_index!(d::AbstractDict{K,Int}, k::K, v::Int) where K
   if haskey(d, k)
     error("Key $k already defined in unique index")
   end
   d[k] = v
 end
-function set_data_index!(d::AbstractDict{K,<:AbstractVector{Int}},
+function set_attr_index!(d::AbstractDict{K,<:AbstractVector{Int}},
                          k::K, v::Int) where K
   insertsorted!(get!(d, k) do; Int[] end, v)
 end
 
-""" Unset key and value from C-set data index, if it is set.
+""" Unset key and value from C-set attr index, if it is set.
 """
-function unset_data_index!(d::AbstractDict{K,Int}, k::K, v::Int) where K
+function unset_attr_index!(d::AbstractDict{K,Int}, k::K, v::Int) where K
   if haskey(d, k) && d[k] == v
     delete!(d, k)
   end
 end
-function unset_data_index!(d::AbstractDict{K,<:AbstractVector{Int}},
+function unset_attr_index!(d::AbstractDict{K,<:AbstractVector{Int}},
                            k::K, v::Int) where K
   if haskey(d, k)
     vs = d[k]
@@ -897,12 +897,12 @@ end
     {map_over, CD,AD,Ts,Idxed,UniqIdxed, AT<:ACSet{CD,AD,Ts,Idxed,UniqIdxed}}
   map_over = [map_over...]
   attrs = filter(x -> x ∈ attr(AD), map_over)
-  data_names = filter(x -> x ∈ data(AD), map_over)
+  attr_type_names = filter(x -> x ∈ attr_type(AD), map_over)
   abc = attrs_by_codom(AD)
-  data_attrs = vcat(map(d -> abc[d], data_names)...)
-  all_attrs = sortunique!(Symbol[attrs; data_attrs])
-  affected_data = sortunique!(map(a -> codom(AD,a), all_attrs))
-  needed_attrs = sortunique!(vcat(map(d -> abc[d], affected_data)...))
+  implicit_attrs = vcat(map(d -> abc[d], attr_type_names)...)
+  all_attrs = sortunique!(Symbol[attrs; implicit_attrs])
+  affected_attr_types = sortunique!(map(a -> codom(AD,a), all_attrs))
+  needed_attrs = sortunique!(vcat(map(d -> abc[d], affected_attr_types)...))
   all_attrs == needed_attrs || error("not enough functions provided to fully transform ACSet")
 
   fn_applications = map(all_attrs) do a
@@ -914,8 +914,8 @@ end
       :($a = (fns[$(Expr(:quote,d))]).(subpart(acs, $qa)))
     end
   end
-  data_types = map(enumerate(data(AD))) do (i,d)
-    if d ∈ affected_data
+  attr_types = map(enumerate(attr_type(AD))) do (i,d)
+    if d ∈ affected_attr_types
       quote
         T = eltype(fn_vals[$(Expr(:quote, abc[d][1]))])
         $(Expr(:block, (map(abc[d][2:end]) do a
@@ -929,7 +929,7 @@ end
   end
   quote
     fn_vals = $(Expr(:tuple, fn_applications...))
-    new_Ts = Tuple{$(data_types...)}
+    new_Ts = Tuple{$(attr_types...)}
     new_acs = ACSet{$CD,$AD,new_Ts,$Idxed,$UniqIdxed}()
     $(Expr(:block, map(ob(CD)) do ob
            :(add_parts!(new_acs,$(Expr(:quote,ob)),nparts(acs,$(Expr(:quote,ob)))))

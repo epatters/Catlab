@@ -9,7 +9,7 @@ using Catlab.Theories: CatDescType, AttrDescType
 A, B = Ob(FreeSchema, :A), Ob(FreeSchema, :B)
 f, g = Hom(:f, A, B), Hom(:g, B, A)
 
-C = Data(FreeSchema.Data, :C)
+C = AttrType(FreeSchema.AttrType, :C)
 x, y = Attr(:x, A, C), Attr(:y, B, C)
 
 @test dom(x) == A
@@ -27,7 +27,7 @@ x, y = Attr(:x, A, C), Attr(:y, B, C)
   src::Hom(E,V)
   tgt::Hom(E,V)
 
-  X::Data
+  X::AttrType
 
   vdec::Attr(V,X)
   edec::Attr(E,X)

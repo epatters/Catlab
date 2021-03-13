@@ -145,16 +145,18 @@ end
 """ Create and add a new generator
 """
 function add_generator!(pres::Presentation, name::Symbol,
-                   type::Symbol, type_args::Vector)
-  add_generator!(pres, make_generator(pres,name,type,type_args))
+                   type::Symbol, type_args::Vector=[]; idem=true)
+  if !(name ∈ keys(pres.generator_name_index)) || !idem
+    add_generator!(pres, make_generator(pres,name,type,type_args))
+  end
 end
 
-""" Create and add multiple terms
+""" Create and add multiple generators
 """
-function add_generators!(pres::Presentation, names::Vector{Symbol},
-                    type::Symbol, type_args::Vector)
+function add_generators!(pres::Presentation, names::Vector,
+                    type::Symbol, type_args::Vector=[]; idem=true)
   for name in names
-    add_generator!(pres, make_generator(pres,name,type,type_args))
+    add_generator!(pres, name, type, type_args, idem=idem)
   end
 end
 
