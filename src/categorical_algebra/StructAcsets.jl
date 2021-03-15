@@ -26,7 +26,11 @@ end
 """ Creates a quoted element of a named tuple used for `StructAcset`s
 """
 function pi_type_elt(dom::Vector, f::Function)
-  Expr(:tuple, Expr(:parameters, [Expr(:kw, nameof(d), f(d)) for d in dom]...))
+  if length(dom) > 0
+    Expr(:tuple, Expr(:parameters, [Expr(:kw, nameof(d), f(d)) for d in dom]...))
+  else # workaround for Julia 1.0
+    :(NamedTuple())
+  end
 end
 
 """ Create the struct declaration for a `StructAcset` from a Presentation
