@@ -37,7 +37,7 @@ function struct_acset(name::Symbol, parent, p::Presentation{Schema}, idxed=[])
   attr_types = p.generators[:AttrType]
   Ts = nameof.(attr_types)
   attrs = p.generators[:Attr]
-  idxed = NamedTuple(x => x ∈ idxed for x in [nameof.(homs);nameof.(attrs)])
+  idxed = (;[x => x ∈ idxed for x in [nameof.(homs);nameof.(attrs)]]...)
   indexed_homs = filter(f -> idxed[nameof(f)], homs)
   indexed_attrs = filter(a -> idxed[nameof(a)], attrs)
   param_type, new_call = if length(attr_types) > 0

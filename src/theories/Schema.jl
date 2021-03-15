@@ -236,7 +236,7 @@ function intify(tuple,s)
 end
 
 function tuplize(xs,f)
-  NamedTuple(nameof(x) => nameof(f(x)) for x in xs)
+  (;[nameof(x) => nameof(f(x)) for x in xs]...)
 end
 
 struct SchemaDescType{obs,homs,attrtypes,attrs,hominfo,attrinfo}
