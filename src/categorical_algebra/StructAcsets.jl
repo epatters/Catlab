@@ -1,5 +1,6 @@
 module StructAcsets
-export @acset_type, @declare_schema, add_parts!, set_subpart!, schema, idxed, AbstractStructAcset
+export @acset_type, @abstract_acset_type, @declare_schema,
+  add_parts!, set_subpart!, subpart, AbstractStructAcset
 
 using MLStyle
 
@@ -101,6 +102,17 @@ macro acset_type(head)
       $(Expr(:quote, name)), $(Expr(:quote, parent)), $(esc(schema)), $idxed))
   end
 end
+
+macro abstract_acset_type(head)
+  type, parent = @match head begin
+    Expr(:(<:), h, p) => (h,p)
+    _ => (head, GlobalRef(StructAcsets, :AbstractStructAcset))
+  end
+  quote
+    abstract type $type{schema,idxed,Ts} <: $parent{schema,idxed,Ts} end
+  end
+end
+
 
 # StructAcset Operations
 ########################
@@ -240,8 +252,27 @@ end
 """ This generates the `_set_subparts!` method for a specific arrow (hom/attr) of a StructAcset
 """
 @generated function _set_subpart!(acs::AbstractStructAcset{schema,idxed},
-                                  part, ::Type{Val{fn}}, subpart) where {schema,idxed,fn}
-  set_subpart_body(SchemaDesc(schema),Dict(idxed),fn)
+                                  part, ::Type{Val{f}}, subpart) where {schema,idxed,f}
+  set_subpart_body(SchemaDesc(schema),Dict(idxed),f)
 end
+
+subpart(acs::AbstractStructAcset, part, f::Symbol) = _subpart(acs, part, Val{f})
+
+function subpart_body(s::SchemaDesc, f::Symbol)
+  if f ∈ s.homs
+    :(acs.homs.$f[part])
+  elseif f ∈ s.attrs
+    :(acs.attrs.$f[part])
+  else
+    error("No such morphism $f")
+  end
+end
+
+@generated function _subpart(acs::AbstractStructAcset{schema},
+                             part, ::Type{Val{f}}) where {schema, f}
+  subpart_body(SchemaDesc(schema), f)
+end
+
+    
 
 end

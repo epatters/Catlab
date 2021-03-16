@@ -14,7 +14,11 @@ end
   weight::Attr(V,T)
 end
 
-@acset_type WGr(ThWGr, index=[:src,:tgt])
+@abstract_acset_type Gr
+
+@acset_type WGr(ThWGr, index=[:src,:tgt]) <: Gr
+
+src(g::Gr,e::Int) = subpart(g,e,:src)
 
 g = WGr{String}()
 
@@ -23,6 +27,7 @@ g = WGr{String}()
 set_subpart!(g,[1,2,3,4],:src,[1,2,3,4])
 set_subpart!(g,[1,2,3,4],:tgt,[2,3,4,1])
 set_subpart!(g,[1,2,3,4],:weight,["a","b","c","d"])
+@test src(g,1) == 1
 
 @test g.obs.V[] == 4
 @test g.obs.E[] == 4
