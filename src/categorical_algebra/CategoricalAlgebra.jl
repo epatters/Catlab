@@ -13,6 +13,7 @@ include("ACSetViews.jl")
 include("GraphCategories.jl")
 include("StructuredCospans.jl")
 include("CommutativeDiagrams.jl")
+include("CatElements.jl")
 
 @reexport using .FreeDiagrams
 @reexport using .CommutativeDiagrams
@@ -20,5 +21,6 @@ include("CommutativeDiagrams.jl")
 @reexport using .CSets
 @reexport using .ACSetViews
 @reexport using .StructuredCospans
+@reexport using .CatElements
 
 end
