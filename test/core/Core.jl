@@ -12,3 +12,7 @@ end
 @testset "Presentations" begin
   include("Present.jl")
 end
+
+@testset "GATmatch" begin
+  include("GATmatch.jl")
+end
