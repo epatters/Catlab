@@ -142,4 +142,22 @@ diagram = FreeDiagram(para)
 @test hom(diagram) == [f,g,h]
 @test (src(diagram), tgt(diagram)) == ([1,1,1], [2,2,2])
 
+# Composable pairs.
+f, g = Hom(:f, A, B), Hom(:g, B, C)
+pair = ComposablePair(f,g)
+@test (dom(pair), codom(pair)) == (A, C)
+@test (first(pair), last(pair)) == (f, g)
+@test_throws ErrorException ComposablePair(f,f)
+
+# Composable morphisms.
+f, g, h = Hom(:f, A, B), Hom(:g, B, C), Hom(:h, C, D)
+comp = ComposableMorphisms([f,g,h])
+@test (dom(comp), codom(comp)) == (A, D)
+@test hom(comp) == [f,g,h]
+
+diagram = FreeDiagram(comp)
+@test ob(diagram) == [A,B,C,D]
+@test hom(diagram) == [f,g,h]
+@test (src(diagram), tgt(diagram)) == (1:3, 2:4)
+
 end
