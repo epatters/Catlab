@@ -164,10 +164,13 @@ as a named tuple or as keyword arguments.
 """
 function subobject(X::T, components) where T <: AbstractACSet
   U = T()
-  copy_parts!(U, X, components)
+  copy_parts!(U, X, map(coerce_vector, components))
   ACSetTransformation(components, U, X)
 end
 subobject(X::AbstractACSet; components...) = subobject(X, (; components...))
+
+coerce_vector(x::AbstractVector) = x
+coerce_vector(f::FinFunction) = collect(f)
 
 # Finding C-set transformations
 ###############################
@@ -556,6 +559,8 @@ unpack_diagram(cospan::Multicospan{<:AbstractACSet}) =
   map(Multicospan, fin_sets(apex(cospan)), unpack_components(legs(cospan)))
 unpack_diagram(para::ParallelMorphisms{<:AbstractACSet}) =
   map(ParallelMorphisms, unpack_components(hom(para)))
+unpack_diagram(comp::ComposableMorphisms{<:AbstractACSet}) =
+  map(ComposableMorphisms, unpack_components(hom(comp)))
 
 function unpack_diagram(d::Union{FreeDiagram{ACS},BipartiteFreeDiagram{ACS}}) where
     {Ob, CD <: CatDesc{Ob}, ACS <: AbstractACSet{CD}}

@@ -382,4 +382,20 @@ colim = colimit(diagram)
 @test ι1 == FinFunction([1,2], 3)
 @test ι2 == FinFunction([1,1,3], 3)
 
+# Pushout complements
+#--------------------
+
+f = FinFunction([1,3], 4)
+g = FinFunction([1,2,5,6], 6)
+h, k = pushout_complement(f, g)
+@test f⋅g == h⋅k
+colim = pushout(f,h)
+@test ob(colim) == FinSet(6)
+@test allunique(collect(copair(colim, g, k)))
+
+# Identification condition failure.
+f = FinFunction([1,3], 4)
+g = FinFunction([1,2,2,3], 3)
+@test_throws ErrorException pushout_complement(f, g)
+
 end

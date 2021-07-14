@@ -5,47 +5,28 @@ export rewrite, rewrite_match, valid_dpo, dangling_condition, id_condition,
 using ..FinSets, ..CSets, ..FreeDiagrams, ..Limits
 using ...Theories
 using ...Theories: attr
+
 import ..Limits: pushout_complement
+using ..CSets: unpack_diagram
 
-"""
-    l
-  L ← I
-m ↓   ↓k
-  G ← K
-    g
+""" Compute pushout complement of attributed C-sets, if possible.
 
-Compute a pushout complement, componentwise in Set. Formally, for each
-component, define K = G / m(L/l(I)). There is a natural injection g: K↪G. For
-each component, define k as equal to the map l;m (every element in the image in
-G is also in K).
-
-Returns a composable pair of ACSet transformations k and g such that (m, g) is
-the pushout of (l, k). Elements of K are ordered in the same order as they
-appear in G.
+The pushout complement is constructed pointwise from pushout complements of
+finite sets. It will fail if any of the pointwise identification conditions or
+the dangling condition do not hold.
 """
 function pushout_complement(pair::ComposablePair{ACS}) where
     {CD, ACS <: AbstractACSet{CD}}
   l, m = pair
-  valid_dpo(l, m) || error("morphisms L and m do not satisfy gluing conditions")
-  I, L, G = dom(l), codom(l), codom(m)
+  I, G = dom(l), codom(m)
+  valid_dpo(l, m) || error("Morphisms l and m do not satisfy gluing conditions")
 
-  # Construct subobject g: K ↪ G.
-  g_components = NamedTuple{ob(CD)}(map(ob(CD)) do c
-    l_image = Set(collect(l[c]))
-    orphans = Set([ m[c](x) for x in parts(L,c) if x ∉ l_image ])
-    filter(x -> x ∉ orphans, parts(G,c))
-  end)
+  # Compute pushout complements pointwise in FinSet.
+  components = map(pushout_complement, unpack_diagram(pair))
+  k_components, g_components = map(first, components), map(last, components)
+
   g = subobject(G, g_components)
-  K = dom(g)
-
-  # Construct morphism k: I → K using partial inverse of g.
-  lm = compose(l, m)
-  k_components = NamedTuple{ob(CD)}(map(ob(CD)) do c
-    g_inv = Dict{Int,Int}(zip(g_components[c], parts(K,c)))
-    [ g_inv[lm[c](x)] for x in parts(I,c) ]
-  end)
-  k = ACSetTransformation(k_components, I, K)
-
+  k = ACSetTransformation(k_components, I, dom(g))
   return ComposablePair(k, g)
 end
 
