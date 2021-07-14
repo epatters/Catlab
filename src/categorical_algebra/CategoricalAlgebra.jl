@@ -13,6 +13,7 @@ include("ACSetViews.jl")
 include("GraphCategories.jl")
 include("StructuredCospans.jl")
 include("CommutativeDiagrams.jl")
+include("Automorphisms.jl")
 include("DataMigration.jl")
 include("DPO.jl")
 
@@ -23,6 +24,7 @@ include("DPO.jl")
 @reexport using .ACSetViews
 @reexport using .StructuredCospans
 @reexport using .DataMigration
+@reexport using .Automorphisms
 @reexport using .DPO
 
 end
