@@ -1,0 +1,12 @@
+name = "DaggerAMC"
+uuid = "85a14c48-69db-4cd9-97af-587947037424"
+authors = ["bosonbaas <bosonbaas@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+AutoHashEquals = "15f4f7f2-30c1-5605-9d31-71845cf9641f"
+Catlab = "134e5e36-593f-5add-ad60-77f754baafbe"
+Dagger = "d58978e5-989f-55fb-8d15-ea34adc7bf54"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
