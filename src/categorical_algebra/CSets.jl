@@ -632,40 +632,38 @@ function can_pushout_complement(pair::ComposablePair{<:AbstractACSet})
 end
 
 """
-Check the dangling condition: m doesn't map a deleted element d to a element
-m(d) ∈ G if m(d) is connected to something outside the image of m.
+Check the dangling condition for a pushout comlement: m doesn't map a deleted
+element d to an element m(d) ∈ G if m(d) is connected to something outside the
+image of m.
 
-For example, in the CSet of graphs:
-  e1
-1 --> 2
+For example, in the C-Set of graphs,
 
-if e1 is not matched but either 1 and 2 are deleted, then e1 is dangling
+   e1
+v1 --> v2
+
+if e1 is not matched but either v1 or v2 are deleted, then e1 is dangling.
 """
 function dangling_condition(pair::ComposablePair{<:AbstractACSet{CD}}) where CD
   l, m = pair
-  orphans, res = Dict(), []
-  for comp in keys(components(l))
-    image = Set(collect(l[comp]))
-    orphans[comp] = Set(
-      map(x->m[comp](x),
-        filter(x->!(x in image),
-          parts(codom(l), comp))))
+  orphans = map(components(l), components(m)) do l_comp, m_comp
+    image = Set(collect(l_comp))
+    Set([ m_comp(x) for x in codom(l_comp) if x ∉ image ])
   end
   # check that for all morphisms in C, we do not map to an orphan
-  for (morph, src_ind, tgt_ind) in zip(hom(CD), dom(CD), codom(CD))
-    src_obj = ob(CD)[src_ind] # e.g. :E, given morph=:src in graphs
-    tgt_obj = ob(CD)[tgt_ind] # e.g. :V, given morph=:src in graphs
+  results = Tuple{Symbol,Int,Int}[]
+  for morph in hom(CD)
+    src_obj, tgt_obj = dom(CD, morph), codom(CD, morph)
     n_src = parts(codom(m), src_obj)
     unmatched_vals = setdiff(n_src, collect(m[src_obj]))
-    unmatched_tgt = map(x -> m.codom[morph][x], collect(unmatched_vals))
+    unmatched_tgt = map(x -> codom(m)[x,morph], collect(unmatched_vals))
     for unmatched_val in setdiff(n_src, collect(m[src_obj]))  # G/m(L) src
-      unmatched_tgt = m.codom[morph][unmatched_val]
+      unmatched_tgt = codom(m)[unmatched_val,morph]
       if unmatched_tgt in orphans[tgt_obj]
-        push!(res, (morph, unmatched_val, unmatched_tgt))
+        push!(results, (morph, unmatched_val, unmatched_tgt))
       end
     end
   end
-  return res
+  return results
 end
 
 # Serialization
