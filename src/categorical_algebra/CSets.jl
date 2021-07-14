@@ -14,7 +14,8 @@ using StaticArrays: SVector
 
 @reexport using ...CSetDataStructures
 using ...GAT, ..FreeDiagrams, ..Limits, ..Sets, ..FinSets
-import ..Limits: limit, colimit, universal
+import ..Limits: limit, colimit, universal, pushout_complement,
+  can_pushout_complement
 import ..FinSets: FinSet, FinFunction, FinDomFunction, force
 using ...Theories: Category, CatDesc, AttrDesc, ob, hom, attr, adom, acodom
 import ...Theories: dom, codom, compose, ⋅, id
@@ -164,10 +165,13 @@ as a named tuple or as keyword arguments.
 """
 function subobject(X::T, components) where T <: AbstractACSet
   U = T()
-  copy_parts!(U, X, components)
+  copy_parts!(U, X, map(coerce_vector, components))
   ACSetTransformation(components, U, X)
 end
 subobject(X::AbstractACSet; components...) = subobject(X, (; components...))
+
+coerce_vector(x::AbstractVector) = x
+coerce_vector(f::FinFunction) = collect(f)
 
 # Finding C-set transformations
 ###############################
@@ -556,6 +560,8 @@ unpack_diagram(cospan::Multicospan{<:AbstractACSet}) =
   map(Multicospan, fin_sets(apex(cospan)), unpack_components(legs(cospan)))
 unpack_diagram(para::ParallelMorphisms{<:AbstractACSet}) =
   map(ParallelMorphisms, unpack_components(hom(para)))
+unpack_diagram(comp::ComposableMorphisms{<:AbstractACSet}) =
+  map(ComposableMorphisms, unpack_components(hom(comp)))
 
 function unpack_diagram(d::Union{FreeDiagram{ACS},BipartiteFreeDiagram{ACS}}) where
     {Ob, CD <: CatDesc{Ob}, ACS <: AbstractACSet{CD}}
@@ -600,6 +606,65 @@ cocone_objects(diagram) = ob(diagram)
 cocone_objects(diagram::BipartiteFreeDiagram) = ob₂(diagram)
 cocone_objects(span::Multispan) = feet(span)
 cocone_objects(para::ParallelMorphisms) = SVector(codom(para))
+
+""" Compute pushout complement of attributed C-sets, if possible.
+
+The pushout complement is constructed pointwise from pushout complements of
+finite sets. If any of the pointwise identification conditions fail (in FinSet),
+this method will raise an error. If the dangling condition fails, the resulting
+C-set will be only partially defined. To check all these conditions in advance,
+use the function [`can_pushout_complement`](@ref).
+"""
+function pushout_complement(pair::ComposablePair{<:AbstractACSet})
+  # Compute pushout complements pointwise in FinSet.
+  components = map(pushout_complement, unpack_diagram(pair))
+  k_components, g_components = map(first, components), map(last, components)
+
+  # Reassemble components into natural transformations.
+  g = subobject(codom(pair), g_components)
+  k = ACSetTransformation(k_components, dom(pair), dom(g))
+  return ComposablePair(k, g)
+end
+
+function can_pushout_complement(pair::ComposablePair{<:AbstractACSet})
+  all(can_pushout_complement, unpack_diagram(pair)) &&
+    isempty(dangling_condition(pair))
+end
+
+"""
+Check the dangling condition for a pushout comlement: m doesn't map a deleted
+element d to an element m(d) ∈ G if m(d) is connected to something outside the
+image of m.
+
+For example, in the C-Set of graphs,
+
+   e1
+v1 --> v2
+
+if e1 is not matched but either v1 or v2 are deleted, then e1 is dangling.
+"""
+function dangling_condition(pair::ComposablePair{<:AbstractACSet{CD}}) where CD
+  l, m = pair
+  orphans = map(components(l), components(m)) do l_comp, m_comp
+    image = Set(collect(l_comp))
+    Set([ m_comp(x) for x in codom(l_comp) if x ∉ image ])
+  end
+  # check that for all morphisms in C, we do not map to an orphan
+  results = Tuple{Symbol,Int,Int}[]
+  for morph in hom(CD)
+    src_obj, tgt_obj = dom(CD, morph), codom(CD, morph)
+    n_src = parts(codom(m), src_obj)
+    unmatched_vals = setdiff(n_src, collect(m[src_obj]))
+    unmatched_tgt = map(x -> codom(m)[x,morph], collect(unmatched_vals))
+    for unmatched_val in setdiff(n_src, collect(m[src_obj]))  # G/m(L) src
+      unmatched_tgt = codom(m)[unmatched_val,morph]
+      if unmatched_tgt in orphans[tgt_obj]
+        push!(results, (morph, unmatched_val, unmatched_tgt))
+      end
+    end
+  end
+  return results
+end
 
 # Serialization
 ###############

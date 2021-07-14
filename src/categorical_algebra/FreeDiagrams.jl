@@ -2,14 +2,14 @@
 
 A [free diagram](https://ncatlab.org/nlab/show/free+diagram) in a category is a
 diagram whose shape is a free category. Examples include the empty diagram,
-pairs of objects, discrete diagrams, parallel morphisms, spans, and cospans.
-Limits and colimits are most commonly taken over free diagrams.
+pairs of objects, discrete diagrams, parallel pairs, composable pairs, and spans
+and cospans. Limits and colimits are most commonly taken over free diagrams.
 """
 module FreeDiagrams
 export AbstractFreeDiagram, FreeDiagram, BipartiteFreeDiagram,
   FixedShapeFreeDiagram, DiscreteDiagram, EmptyDiagram, ObjectPair,
   Span, Cospan, Multispan, Multicospan, SMultispan, SMulticospan,
-  ParallelPair, ParallelMorphisms,
+  ParallelPair, ParallelMorphisms, ComposablePair, ComposableMorphisms,
   ob, hom, dom, codom, apex, legs, feet, left, right, bundle_legs,
   nv, ne, src, tgt, vertices, edges, has_vertex, has_edge,
   add_vertex!, add_vertices!, add_edge!, add_edges!,
@@ -225,6 +225,48 @@ Base.lastindex(para::ParallelMorphisms) = lastindex(para.homs)
 
 allequal(xs::AbstractVector) = isempty(xs) || all(==(xs[1]), xs)
 
+# Composable morphisms
+#---------------------
+
+""" Composable morphisms in a category.
+
+Composable morphisms are a sequence of morphisms in a category that form a path
+in the underlying graph of the category.
+
+For the common special case of two morphisms, see [`ComposablePair`](@ref).
+"""
+@auto_hash_equals struct ComposableMorphisms{Ob,Hom,Homs<:AbstractVector{Hom}} <:
+    FixedShapeFreeDiagram{Ob}
+  homs::Homs
+end
+
+function ComposableMorphisms(homs::Homs) where {Hom, Homs<:AbstractVector{Hom}}
+  doms, codoms = dom.(homs), codom.(homs)
+  all(c == d for (c,d) in zip(codoms[1:end-1], doms[2:end])) ||
+    error("Domain mismatch in composable sequence: $homs")
+  ComposableMorphisms{Union{eltype(doms),eltype(codoms)},Hom,Homs}(homs)
+end
+
+""" Pair of composable morphisms in a category.
+
+[Composable pairs](https://ncatlab.org/nlab/show/composable+pair) are a common
+special case of [`ComposableMorphisms`](@ref).
+"""
+const ComposablePair{Ob,Hom} = ComposableMorphisms{Ob,Hom,<:StaticVector{2,Hom}}
+
+ComposablePair(first, last) = ComposableMorphisms(SVector(first, last))
+
+dom(comp::ComposableMorphisms) = dom(first(comp))
+codom(comp::ComposableMorphisms) = codom(last(comp))
+hom(comp::ComposableMorphisms) = comp.homs
+
+Base.iterate(comp::ComposableMorphisms, args...) = iterate(comp.homs, args...)
+Base.eltype(comp::ComposableMorphisms) = eltype(comp.homs)
+Base.length(comp::ComposableMorphisms) = length(comp.homs)
+Base.getindex(comp::ComposableMorphisms, i) = comp.homs[i]
+Base.firstindex(comp::ComposableMorphisms) = firstindex(comp.homs)
+Base.lastindex(comp::ComposableMorphisms) = lastindex(comp.homs)
+
 # Diagrams of flexible shape
 ############################
 
@@ -347,6 +389,14 @@ function FreeDiagram(para::ParallelMorphisms{Dom,Codom,Hom}) where {Dom,Codom,Ho
   d = FreeDiagram{Union{Dom,Codom},Hom}()
   add_vertices!(d, 2, ob=[dom(para), codom(para)])
   add_edges!(d, fill(1,length(para)), fill(2,length(para)), hom=hom(para))
+  return d
+end
+
+function FreeDiagram(comp::ComposableMorphisms{Ob,Hom}) where {Ob,Hom}
+  d = FreeDiagram{Ob,Hom}()
+  n = length(comp)
+  add_vertices!(d, n+1, ob=[dom.(comp); codom(comp)])
+  add_edges!(d, 1:n, 2:(n+1), hom=hom(comp))
   return d
 end
 
