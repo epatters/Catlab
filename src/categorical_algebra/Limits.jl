@@ -9,7 +9,7 @@ export AbstractLimit, AbstractColimit, Limit, Colimit,
   BinaryPullback, Pullback, pullback,
   BinaryEqualizer, Equalizer, equalizer, incl,
   BinaryCoproduct, Coproduct, coproduct, coproj1, coproj2, copair,
-  BinaryPushout, Pushout, pushout, pushout_complement,
+  BinaryPushout, Pushout, pushout, pushout_complement, can_pushout_complement,
   BinaryCoequalizer, Coequalizer, coequalizer, proj,
   @cartesian_monoidal_instance, @cocartesian_monoidal_instance,
   ComposeProductEqualizer, ComposeCoproductCoequalizer
@@ -265,6 +265,12 @@ factorize(colim::Coequalizer, h) = universal(colim, SMulticospan{1}(h))
 essential ingredient for double pushout (DPO) rewriting.
 """
 pushout_complement(f, g) = pushout_complement(ComposablePair(f, g))
+
+""" Can a pushout complement be constructed for a composable pair?
+
+Even in nice categories, this is not generally possible.
+"""
+can_pushout_complement(f, g) = can_pushout_complement(ComposablePair(f, g))
 
 # (Co)cartesian monoidal categories
 ###################################

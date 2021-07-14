@@ -193,12 +193,11 @@ add_parts!(L,:X,1)
 add_parts!(G,:X,1)
 l = CSetTransformation(I,L,X=[1,1])
 m = CSetTransformation(L,G,X=[1])
-@test isempty(dangling_condition(l,m))
-@test isempty(vcat(collect(id_condition(l,m))...))
+@test can_pushout_complement(l,m)
 ik, kg = pushout_complement(l,m)
 # There are 3 functions `ik` that make this a valid P.C.
 # codom=1 with [1,1], codom=2 with [1,2] or [2,1]
-K = ik.codom
+K = codom(ik)
 @test nparts(K, :X) == 1 # algorithm currently picks the first option
 
 # Non-discrete interface graph. Non-monic matching
@@ -222,16 +221,14 @@ m = CSetTransformation(arr, arr_loop, V=[2,2], E=[2]) # NOT MONIC
 # two possible morphisms L -> squarediag, but both violate dangling condition
 L = CSetTransformation(arr, span, V=[1,2], E=[1]);
 m = CSetTransformation(span, squarediag, V=[2,1,4], E=[1,2]);
-
-@test (:src, 5, 4) in dangling_condition(L,m)
+@test (:src, 5, 4) in dangling_condition(ComposablePair(L,m))
 
 # violate id condition because two orphans map to same point
 L = CSetTransformation(I2, biarr, V=[1,2]); # delete both arrows
 m = CSetTransformation(biarr, arr_loop, V=[2,2], E=[2,2]);
-@test (:E, 1, 2, 2) in id_condition(L,m)[1]
+@test (1, 2) in id_condition(ComposablePair(L[:E],m[:E]))[2]
 L = CSetTransformation(arr, biarr, V=[1,2], E=[1]); # delete one arrow
-@test (:E, 1, 2) in id_condition(L,m)[2]
-
+@test 1 in id_condition(ComposablePair(L[:E],m[:E]))[1]
 
 span_triangle = Graph(3); # 2 <- 1 -> 3 (with edge 2->3)
 add_edges!(span_triangle,[1,1,2], [2,3,3]);

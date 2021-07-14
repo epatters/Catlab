@@ -14,7 +14,8 @@ using StaticArrays: SVector
 
 @reexport using ...CSetDataStructures
 using ...GAT, ..FreeDiagrams, ..Limits, ..Sets, ..FinSets
-import ..Limits: limit, colimit, universal, pushout_complement
+import ..Limits: limit, colimit, universal, pushout_complement,
+  can_pushout_complement
 import ..FinSets: FinSet, FinFunction, FinDomFunction, force
 using ...Theories: Category, CatDesc, AttrDesc, ob, hom, attr, adom, acodom
 import ...Theories: dom, codom, compose, ⋅, id
@@ -609,10 +610,10 @@ cocone_objects(para::ParallelMorphisms) = SVector(codom(para))
 """ Compute pushout complement of attributed C-sets, if possible.
 
 The pushout complement is constructed pointwise from pushout complements of
-finite sets. If any of the pointwise identification conditions fail in FinSet),
+finite sets. If any of the pointwise identification conditions fail (in FinSet),
 this method will raise an error. If the dangling condition fails, the resulting
-C-set will be only partially defined. To check these conditions in advance, use
-the function [`valid_dpo`](@ref).
+C-set will be only partially defined. To check all these conditions in advance,
+use the function [`can_pushout_complement`](@ref).
 """
 function pushout_complement(pair::ComposablePair{<:AbstractACSet})
   # Compute pushout complements pointwise in FinSet.
@@ -623,6 +624,48 @@ function pushout_complement(pair::ComposablePair{<:AbstractACSet})
   g = subobject(codom(pair), g_components)
   k = ACSetTransformation(k_components, dom(pair), dom(g))
   return ComposablePair(k, g)
+end
+
+function can_pushout_complement(pair::ComposablePair{<:AbstractACSet})
+  all(can_pushout_complement, unpack_diagram(pair)) &&
+    isempty(dangling_condition(pair))
+end
+
+"""
+Check the dangling condition: m doesn't map a deleted element d to a element
+m(d) ∈ G if m(d) is connected to something outside the image of m.
+
+For example, in the CSet of graphs:
+  e1
+1 --> 2
+
+if e1 is not matched but either 1 and 2 are deleted, then e1 is dangling
+"""
+function dangling_condition(pair::ComposablePair{<:AbstractACSet{CD}}) where CD
+  l, m = pair
+  orphans, res = Dict(), []
+  for comp in keys(components(l))
+    image = Set(collect(l[comp]))
+    orphans[comp] = Set(
+      map(x->m[comp](x),
+        filter(x->!(x in image),
+          parts(codom(l), comp))))
+  end
+  # check that for all morphisms in C, we do not map to an orphan
+  for (morph, src_ind, tgt_ind) in zip(hom(CD), dom(CD), codom(CD))
+    src_obj = ob(CD)[src_ind] # e.g. :E, given morph=:src in graphs
+    tgt_obj = ob(CD)[tgt_ind] # e.g. :V, given morph=:src in graphs
+    n_src = parts(codom(m), src_obj)
+    unmatched_vals = setdiff(n_src, collect(m[src_obj]))
+    unmatched_tgt = map(x -> m.codom[morph][x], collect(unmatched_vals))
+    for unmatched_val in setdiff(n_src, collect(m[src_obj]))  # G/m(L) src
+      unmatched_tgt = m.codom[morph][unmatched_val]
+      if unmatched_tgt in orphans[tgt_obj]
+        push!(res, (morph, unmatched_val, unmatched_tgt))
+      end
+    end
+  end
+  return res
 end
 
 # Serialization

@@ -387,6 +387,7 @@ colim = colimit(diagram)
 
 f = FinFunction([1,3], 4)
 g = FinFunction([1,2,5,6], 6)
+@test can_pushout_complement(f, g)
 h, k = pushout_complement(f, g)
 @test f⋅g == h⋅k
 colim = pushout(f,h)
@@ -396,6 +397,7 @@ colim = pushout(f,h)
 # Identification condition failure.
 f = FinFunction([1,3], 4)
 g = FinFunction([1,2,2,3], 3)
+@test !can_pushout_complement(f, g)
 @test_throws ErrorException pushout_complement(f, g)
 
 end
