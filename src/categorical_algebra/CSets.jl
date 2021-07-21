@@ -1,8 +1,8 @@
 """ Categories of C-sets and attributed C-sets.
 """
 module CSets
-export ACSetTransformation, CSetTransformation, components, force, is_natural,
-  subobject, homomorphism, homomorphisms, is_homomorphic,
+export ACSetTransformation, CSetTransformation, SubACSet, SubCSet,
+  components, force, is_natural, homomorphism, homomorphisms, is_homomorphic,
   isomorphism, isomorphisms, is_isomorphic,
   generate_json_acset, parse_json_acset, read_json_acset, write_json_acset
 
@@ -13,12 +13,14 @@ using Reexport
 using StaticArrays: SVector
 
 @reexport using ...CSetDataStructures
-using ...GAT, ..FreeDiagrams, ..Limits, ..Sets, ..FinSets
+using ...GAT, ..FreeDiagrams, ..Limits, ..Subobjects, ..Sets, ..FinSets
 import ..Limits: limit, colimit, universal
-import ..FinSets: FinSet, FinFunction, FinDomFunction, force
+import ..Subobjects: Subobject, SubobjectBiHeytingAlgebra,
+  implies, ⟹, subtract, \, negate, ¬, non, ~
+import ..FinSets: FinSet, FinFunction, FinDomFunction, force, as_predicate
 using ...Theories: Category, CatDesc, AttrDesc, ob, hom, attr, adom, acodom
-import ...Theories: dom, codom, compose, ⋅, id
-using ...Present
+import ...Theories: dom, codom, compose, ⋅, id,
+  meet, ∧, join, ∨, top, ⊤, bottom, ⊥
 
 # FinSets interop
 #################
@@ -107,8 +109,8 @@ for data attributes is a commutative triangle, rather than a commutative square.
 end
 
 function coerce_component(ob::Symbol, f::FinFunction{Int,Int}, X, Y)
-  @assert length(dom(f)) == nparts(X,ob) "Domain error in component $ob"
-  @assert length(codom(f)) == nparts(Y,ob) "Codomain error in component $ob"
+  length(dom(f)) == nparts(X,ob) || error("Domain error in component $ob")
+  length(codom(f)) == nparts(Y,ob) || error("Codomain error in component $ob")
   return f
 end
 function coerce_component(ob::Symbol, f, X, Y)::FinFunction{Int,Int}
@@ -155,19 +157,6 @@ end
 map_components(f, α::ACSetTransformation) =
   ACSetTransformation(map(f, components(α)), dom(α), codom(α))
 force(α::ACSetTransformation) = map_components(force, α)
-
-""" Construct subobject of C-set from components of inclusion map.
-
-Recall that a *subobject* of a C-set ``X`` is a monomorphism ``α: U → X``. This
-function constructs a subobject from the components of the monomorphism, given
-as a named tuple or as keyword arguments.
-"""
-function subobject(X::T, components) where T <: AbstractACSet
-  U = T()
-  copy_parts!(U, X, components)
-  ACSetTransformation(components, U, X)
-end
-subobject(X::AbstractACSet; components...) = subobject(X, (; components...))
 
 # Finding C-set transformations
 ###############################
@@ -370,8 +359,6 @@ be mutated even when the assignment fails.
 """
 @generated function assign_elem!(state::BacktrackingState{CD,AD}, depth,
                                  ::Type{Val{c}}, x, y) where {CD, AD, c}
-  out_hom = [ f => codom(CD, f) for f in hom(CD) if dom(CD, f) == c ]
-  out_attr = [ f for f in attr(AD) if dom(AD, f) == c ]
   quote
     y′ = state.assignment.$c[x]
     y′ == y && return true  # If x is already assigned to y, return immediately.
@@ -383,7 +370,7 @@ be mutated even when the assignment fails.
 
     # Check attributes first to fail as quickly as possible.
     X, Y = state.dom, state.codom
-    $(map(out_attr) do f
+    $(map(out_attr(AD, c)) do f
         :(subpart(X,x,$(quot(f))) == subpart(Y,y,$(quot(f))) || return false)
       end...)
 
@@ -393,7 +380,7 @@ be mutated even when the assignment fails.
     if !isnothing(state.inv_assignment.$c)
       state.inv_assignment.$c[y] = x
     end
-    $(map(out_hom) do (f, d)
+    $(map(out_hom(CD, c)) do (f, d)
         :(assign_elem!(state, depth, Val{$(quot(d))}, subpart(X,x,$(quot(f))),
                        subpart(Y,y,$(quot(f)))) || return false)
       end...)
@@ -405,7 +392,6 @@ end
 """
 @generated function unassign_elem!(state::BacktrackingState{CD}, depth,
                                    ::Type{Val{c}}, x) where {CD, c}
-  out_hom = [ f => codom(CD, f) for f in hom(CD) if dom(CD, f) == c ]
   quote
     state.assignment.$c[x] == 0 && return
     assign_depth = state.assignment_depth.$c[x]
@@ -418,7 +404,7 @@ end
       end
       state.assignment.$c[x] = 0
       state.assignment_depth.$c[x] = 0
-      $(map(out_hom) do (f, d)
+      $(map(out_hom(CD, c)) do (f, d)
           :(unassign_elem!(state, depth, Val{$(quot(d))},
                            subpart(X,x,$(quot(f)))))
         end...)
@@ -431,6 +417,11 @@ end
 partial_assignments(x::AbstractDict) = pairs(x)
 partial_assignments(x::AbstractVector) =
   ((i,y) for (i,y) in enumerate(x) if !isnothing(y) && y > 0)
+
+# FIXME: Should these accessors go elsewhere?
+in_hom(CD, c) = [dom(CD,f) => f for f in hom(CD) if codom(CD,f) == c]
+out_hom(CD, c) = [f => codom(CD,f) for f in hom(CD) if dom(CD,f) == c]
+out_attr(AD, c) = [f for f in attr(AD) if dom(AD, f) == c]
 
 # Category of C-sets
 ####################
@@ -600,6 +591,146 @@ cocone_objects(diagram) = ob(diagram)
 cocone_objects(diagram::BipartiteFreeDiagram) = ob₂(diagram)
 cocone_objects(span::Multispan) = feet(span)
 cocone_objects(para::ParallelMorphisms) = SVector(codom(para))
+
+# Sub-C-sets
+############
+
+const SubCSet{CD} = Subobject{<:AbstractCSet{CD}}
+const SubACSet{CD,AD} = Subobject{<:AbstractACSet{CD,AD}}
+
+components(A::SubACSet) = map(Subobject, components(hom(A)))
+force(A::SubACSet) = Subobject(force(hom(A)))
+
+""" Construct subobject of C-set from components of inclusion or predicate.
+
+This function constructs a subobject from the components of the inclusion
+morphism, given as a named tuple or as keyword arguments. The components can
+also be specified as predicates (boolean vectors).
+"""
+function Subobject(X::T, components) where T <: AbstractACSet
+  U = T()
+  components = map(coerce_subob_component, components)
+  copy_parts!(U, X, components)
+  Subobject(ACSetTransformation(components, U, X))
+end
+Subobject(X::AbstractACSet; components...) = Subobject(X, (; components...))
+
+coerce_subob_component(f::FinFunction{Int}) = collect(f)
+coerce_subob_component(A::SubFinSet{Int}) = collect(hom(A))
+coerce_subob_component(f::AbstractVector{Int}) = f
+coerce_subob_component(pred::Union{AbstractVector{Bool},BitVector}) =
+  findall(pred)
+
+@instance SubobjectBiHeytingAlgebra{AbstractACSet,SubACSet} begin
+  @import ob
+  meet(A::SubACSet, B::SubACSet) = meet(A, B, SubOpBoolean())
+  join(A::SubACSet, B::SubACSet) = join(A, B, SubOpBoolean())
+  top(X::AbstractACSet) = top(X, SubOpWithLimits())
+  bottom(X::AbstractACSet) = bottom(X, SubOpWithLimits())
+
+  implies(A::SubACSet, B::SubACSet) = implies(A, B, SubOpBoolean())
+  subtract(A::SubACSet, B::SubACSet) = subtract(A, B, SubOpBoolean())
+  negate(A::SubACSet) = implies(A, bottom(ob(A)), SubOpBoolean())
+  non(A::SubACSet) = subtract(top(ob(A)), A, SubOpBoolean())
+end
+
+function meet(A::SubACSet, B::SubACSet, ::SubOpBoolean)
+  Subobject(common_ob(A, B), map(components(A), components(B)) do A₀, B₀
+    meet(A₀, B₀, SubOpBoolean())
+  end)
+end
+function join(A::SubACSet, B::SubACSet, ::SubOpBoolean)
+  Subobject(common_ob(A, B), map(components(A), components(B)) do A₀, B₀
+    join(A₀, B₀, SubOpBoolean())
+  end)
+end
+top(X::AbstractACSet, ::SubOpBoolean) =
+  Subobject(X, map(X₀ -> top(X₀, SubOpBoolean()), fin_sets(X)))
+bottom(X::AbstractACSet, ::SubOpBoolean) =
+  Subobject(X, map(X₀ -> bottom(X₀, SubOpBoolean()), fin_sets(X)))
+
+""" Implication of sub-C-sets.
+
+By (Reyes et al 2004, Proposition 9.1.5), the implication ``A ⟹ B`` for two
+sub-``C``-sets ``A,B ↪ X`` is given by
+
+``x ∈ (A ⟹ B)(c) iff ∀f: c → c′, x⋅f ∈ A(c′) ⟹ x⋅f ∈ B(c′)``
+
+for all ``c ∈ C`` and ``x ∈ X(c)``. By the definition of implication and De
+Morgan's law in classical logic, this is equivalent to
+
+``x ∉ (A ⟹ B)(c) iff ∃f: c → c′, x⋅f ∈ A(c′) ∧ x⋅f ∉ B(c′)``.
+
+In this form, we can clearly see the duality to formula and algorithm for
+subtraction of sub-C-sets ([`subtract`](@ref)).
+"""
+function implies(A::SubACSet{CD}, B::SubACSet{CD}, ::SubOpBoolean) where CD
+  X = common_ob(A, B)
+  A, B = map(as_predicate, components(A)), map(as_predicate, components(B))
+  D = map(X₀ -> trues(length(X₀)), fin_sets(X))
+
+  function unset!(c, x)
+    D[c][x] = false
+    for (c′,x′) in all_incident(X, Val{c}, x)
+      if D[c′][x′]; unset!(c′,x′) end
+    end
+  end
+
+  for c in ob(CD), x in parts(X,c)
+    if D[c][x] && A[c][x] && !B[c][x]; unset!(c,x) end
+  end
+  Subobject(X, D)
+end
+
+""" Subtraction of sub-C-sets.
+
+By (Reyes et al 2004, Sec 9.1, pp. 144), the subtraction ``A ∖ B`` for two
+sub-``C``-sets ``A,B ↪ X`` is given by
+
+``x ∈ (A ∖ B)(c) iff ∃f: c′ → c, ∃x′ ∈ f⁻¹⋅x, x′ ∈ A(c′) ∧ x′ ∉ B(c′)``
+
+for all ``c ∈ C`` and ``x ∈ X(c)``. Compare with [`implies`](@ref).
+"""
+function subtract(A::SubACSet{CD}, B::SubACSet{CD}, ::SubOpBoolean) where CD
+  X = common_ob(A, B)
+  A, B = map(as_predicate, components(A)), map(as_predicate, components(B))
+  D = map(X₀ -> falses(length(X₀)), fin_sets(X))
+
+  function set!(c, x)
+    D[c][x] = true
+    for (c′,x′) in all_subparts(X, Val{c}, x)
+      if !D[c′][x′]; set!(c′,x′) end
+    end
+  end
+
+  for c in ob(CD), x in parts(X,c)
+    if !D[c][x] && A[c][x] && !B[c][x]; set!(c,x) end
+  end
+  Subobject(X, D)
+end
+
+function common_ob(A::Subobject, B::Subobject)
+  (X = ob(A)) == ob(B) ||
+    error("Subobjects have different base objects: $(ob(A)) != $(ob(B))")
+  return X
+end
+
+# FIXME: Should these two accessors go elsewhere?
+
+@generated function all_subparts(X::AbstractACSet{CD},
+                                 ::Type{Val{c}}, x::Int) where {CD,c}
+  Expr(:tuple, map(out_hom(CD, c)) do (f,c′)
+    :($(quot(c′)), subpart(X,x,$(quot(f))))
+  end...)
+end
+
+@generated function all_incident(X::AbstractACSet{CD},
+                                 ::Type{Val{c}}, x::Int) where {CD,c}
+  Expr(:call, GlobalRef(Iterators, :flatten),
+    Expr(:tuple, map(in_hom(CD, c)) do (c′,f)
+      :(Tuple{Symbol,Int}[ ($(quot(c′)),x′) for x′ in incident(X,x,$(quot(f))) ])
+    end...))
+end
 
 # Serialization
 ###############

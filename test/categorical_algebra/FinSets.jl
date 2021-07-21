@@ -382,4 +382,24 @@ colim = colimit(diagram)
 @test ι1 == FinFunction([1,2], 3)
 @test ι2 == FinFunction([1,1,3], 3)
 
+# Subsets
+#########
+
+X = FinSet(10)
+A, B = SubFinSet(X, [1,2,5,6,8,9]), SubFinSet(X, [2,3,5,7,8])
+@test ob(A) == X
+
+# Lattice of subsets.
+@test A ∧ B == SubFinSet(X, [2,5,8])
+@test A ∨ B == SubFinSet(X, [1,2,3,5,6,7,8,9])
+@test ⊤(X) |> force == SubFinSet(X, 1:10)
+@test ⊥(X) |> force == SubFinSet(X, 1:0)
+
+for alg in (SubOpBoolean(), SubOpWithLimits())
+  @test meet(A, B, alg) |> sort == SubFinSet(X, [2,5,8])
+  @test join(A, B, alg) |> sort == SubFinSet(X, [1,2,3,5,6,7,8,9])
+  @test top(X, alg) |> force == SubFinSet(X, 1:10)
+  @test bottom(X, alg) |> force == SubFinSet(X, 1:0)
+end
+
 end

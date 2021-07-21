@@ -6,13 +6,11 @@ using Catlab, Catlab.Theories, Catlab.Graphs, Catlab.CategoricalAlgebra,
 using Catlab.Graphs.BasicGraphs: TheoryGraph
 using Catlab.Present
 
-function roundtrip_json_acset(x::T) where T <: AbstractACSet
-  mktempdir() do dir
-    path = joinpath(dir, "acset.json")
-    write_json_acset(x, path)
-    read_json_acset(T, path)
-  end
+@present TheoryDDS(FreeSchema) begin
+  X::Ob
+  Φ::Hom(X,X)
 end
+const DDS = CSetType(TheoryDDS, index=[:Φ])
 
 # FinSets interop
 #################
@@ -26,7 +24,6 @@ f = FinFunction(g, :src)
 @test codom(f) == FinSet(6)
 @test collect(f) == 2:4
 @test is_indexed(f)
-@test roundtrip_json_acset(g) == g
 
 f = FinDomFunction(g, :E)
 @test collect(f) == 1:3
@@ -40,7 +37,6 @@ g = path_graph(WeightedGraph{Float64}, 3, E=(weight=[0.5, 1.5],))
 f = FinDomFunction(g, :weight)
 @test codom(f) == TypeSet(Float64)
 @test collect(f) == [0.5, 1.5]
-@test roundtrip_json_acset(g) == g
 
 # C-set morphisms
 #################
@@ -71,12 +67,6 @@ g, h = path_graph(Graph, 4), cycle_graph(Graph, 2)
 @test compose(α,β) == CSetTransformation((V=α[:V]⋅β[:V], E=α[:E]⋅β[:E]), g, h)
 @test force(compose(id(g), α)) == α
 @test force(compose(α, id(h))) == α
-
-# Subobjects.
-α = subobject(g, V=[2,3,4], E=[2,3])
-@test is_natural(α)
-@test dom(α) == path_graph(Graph, 3)
-@test codom(α) == g
 
 # Limits
 #-------
@@ -257,7 +247,6 @@ add_edge!(h, 1, 1, elabel=:f)
 coprod = ob(coproduct(g, h))
 @test subpart(coprod, :vlabel) == [:u, :v, :u]
 @test subpart(coprod, :elabel) == [:e, :f]
-@test roundtrip_json_acset(g) == g
 
 # Pushout of labeled graph.
 g0 = VELabeledGraph{Symbol}()
@@ -348,13 +337,94 @@ h = cycle_graph(LabeledGraph{Symbol}, 4, V=(label=[:c,:d,:a,:b],))
 h = cycle_graph(LabeledGraph{Symbol}, 4, V=(label=[:a,:b,:d,:c],))
 @test !is_homomorphic(g, h)
 
+# Sub-C-sets
+############
+
+# Construct sub-C-sets.
+X = path_graph(Graph, 4)
+A = Subobject(X, V=[2,3,4], E=[2,3])
+@test Subobject(X, V=[false,true,true,true], E=[false,true,true]) == A
+α = hom(A)
+@test is_natural(α)
+@test dom(α) == path_graph(Graph, 3)
+@test codom(α) == X
+
+# Lattice of sub-C-sets.
+X = Graph(6)
+add_edges!(X, [1,2,3,4,4], [3,3,4,5,6])
+A, B = Subobject(X, V=1:4, E=1:3), Subobject(X, V=3:6, E=3:5)
+@test A ∧ B == Subobject(X, V=3:4, E=3:3)
+@test A ∨ B == Subobject(X, V=1:6, E=1:5)
+@test ⊤(X) |> force == Subobject(X, V=1:6, E=1:5)
+@test ⊥(X) |> force == Subobject(X, V=1:0, E=1:0)
+
+# Bi-Heyting algebra of sub-C-sets.
+#
+# Implication in Graph (Reyes et al 2004, Sec 9.1, p. 139).
+I = Graph(1)
+Y = path_graph(Graph, 3) ⊕ path_graph(Graph, 2) ⊕ path_graph(Graph, 2)
+add_vertex!(Y)
+add_edge!(Y, 2, 8)
+Z = cycle_graph(Graph, 1) ⊕ cycle_graph(Graph, 1)
+ιY, ιZ = colim = pushout(CSetTransformation(I, Y, V=[3]),
+                         CSetTransformation(I, Z, V=[1]))
+B_implies_C, B = Subobject(ιY), Subobject(ιZ)
+C = Subobject(ob(colim), V=2:5, E=2:3)
+@test (B ⟹ C) == B_implies_C
+
+# Subtraction in Graph (Reyes et al 2004, Sec 9.1, p. 144).
+X = ob(colim)
+C = Subobject(X, V=2:5, E=[2,3,ne(X)-1])
+@test (B \ C) == Subobject(X, V=[nv(X)], E=[ne(X)])
+
+# Negation in Graph (Reyes et al 2004, Sec 9.1, p. 139-140).
+X = cycle_graph(Graph, 1) ⊕ path_graph(Graph, 2) ⊕ cycle_graph(Graph, 4)
+add_vertex!(X)
+add_edge!(X, 4, 8)
+A = Subobject(X, V=[2,3,4,5,8], E=[3,7])
+neg_A = Subobject(X, V=[1,6,7], E=[1,5])
+@test is_natural(hom(A)) && is_natural(hom(neg_A))
+@test ¬A == neg_A
+@test ¬neg_A == Subobject(X, V=[2,3,4,5,8], E=[2,3,7])
+
+# Non in Graph (Reyes et al 2004, Sec 9.1, p. 144).
+X = path_graph(Graph, 5) ⊕ path_graph(Graph, 2) ⊕ cycle_graph(Graph, 1)
+A = Subobject(X, V=[1,4,5], E=[4])
+non_A = Subobject(X, V=setdiff(vertices(X), 5), E=setdiff(edges(X), 4))
+@test ~A == non_A
+@test ~non_A == Subobject(X, V=[4,5], E=[4])
+
+# Negation and non in DDS.
+S₁ = DDS(); add_parts!(S₁, :X, 5, Φ=[3,3,4,5,5])
+S₂ = DDS(); add_parts!(S₂, :X, 3, Φ=[2,3,3])
+ι₁, ι₂ = colim = coproduct(S₁, S₂)
+S = ob(colim)
+A = Subobject(S, X=[3,4,5])
+@test ¬A == Subobject(ι₂)
+@test ¬Subobject(ι₂) == Subobject(ι₁)
+@test ~A == ⊤(S) |> force
+
 # Serialization
 ###############
 
-@present TheoryDDS(FreeSchema) begin
-  X::Ob
-  Φ::Hom(X,X)
+function roundtrip_json_acset(x::T) where T <: AbstractACSet
+  mktempdir() do dir
+    path = joinpath(dir, "acset.json")
+    write_json_acset(x, path)
+    read_json_acset(T, path)
+  end
 end
+
+g = star_graph(Graph, 5)
+@test roundtrip_json_acset(g) == g
+
+g = path_graph(WeightedGraph{Float64}, 3, E=(weight=[0.5, 1.5],))
+@test roundtrip_json_acset(g) == g
+
+g = VELabeledGraph{Symbol}()
+add_vertices!(g, 2, vlabel=[:u,:v])
+add_edge!(g, 1, 2, elabel=:e)
+@test roundtrip_json_acset(g) == g
 
 @present TheoryLabeledDDS <: TheoryDDS begin
   Label::Data

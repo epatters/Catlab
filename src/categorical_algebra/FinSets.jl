@@ -2,7 +2,8 @@
 """
 module FinSets
 export FinSet, FinFunction, FinDomFunction, force, is_indexed, preimage,
-  JoinAlgorithm, SmartJoin, NestedLoopJoin, SortMergeJoin, HashJoin
+  JoinAlgorithm, SmartJoin, NestedLoopJoin, SortMergeJoin, HashJoin,
+  SubFinSet, SubOpBoolean
 
 using Reexport
 
@@ -14,9 +15,10 @@ using StaticArrays: StaticVector, SVector, SizedVector, similar_type
 
 @reexport using ..Sets
 using ...GAT, ...Theories
-using ...CSetDataStructures, ...Graphs, ..FreeDiagrams, ..Limits
-import ...Theories: dom, codom
+using ...CSetDataStructures, ...Graphs, ..FreeDiagrams, ..Limits, ..Subobjects
+import ...Theories: dom, codom, meet, ∧, join, ∨, top, ⊤, bottom, ⊥
 import ..Limits: limit, colimit, universal
+import ..Subobjects: Subobject, SubobjectLattice
 using ..Sets: SetFunctionCallable, SetFunctionIdentity
 
 # Data types
@@ -827,6 +829,59 @@ function universal(colim::FinSetFreeDiagramColimit,
                    cocone::Multicospan{<:FinSet{Int}})
   h = universal(colim.coprod, cocone)
   pass_to_quotient(colim.proj, h)
+end
+
+# Subsets
+#########
+
+""" Subset of a finite set represented as an inclusion map.
+"""
+const SubFinSet{S,T} = Subobject{<:FinSet{S,T}}
+
+Subobject(X::FinSet, f) = Subobject(FinFunction(f, X))
+SubFinSet(X, f) = Subobject(FinFunction(f, X))
+
+force(A::SubFinSet{Int}) = Subobject(force(hom(A)))
+Base.collect(A::SubFinSet) = collect(hom(A))
+Base.sort(A::SubFinSet) = SubFinSet(ob(A), sort(collect(A)))
+
+const AbstractBoolVector = Union{AbstractVector{Bool},BitVector}
+
+function Subobject(X::FinSet, pred::AbstractBoolVector)
+  length(pred) == length(X) ||
+    error("Size of predicate $pred does not equal size of object $X")
+  Subobject(X, findall(pred))
+end
+function SubFinSet(pred::AbstractBoolVector)
+  Subobject(FinSet(length(pred)), findall(pred))
+end
+
+@instance SubobjectLattice{FinSet,SubFinSet} begin
+  @import ob
+  meet(A::SubFinSet, B::SubFinSet) = meet(A, B, SubOpBoolean())
+  join(A::SubFinSet, B::SubFinSet) = join(A, B, SubOpBoolean())
+  top(X::FinSet) = top(X, SubOpWithLimits())
+  bottom(X::FinSet) = bottom(X, SubOpWithLimits())
+end
+
+""" Algorithm to compute subobject operations using elementwise boolean logic.
+"""
+struct SubOpBoolean <: SubOpAlgorithm end
+
+meet(A::SubFinSet{Int}, B::SubFinSet{Int}, ::SubOpBoolean) =
+  SubFinSet(as_predicate(A) .& as_predicate(B))
+join(A::SubFinSet{Int}, B::SubFinSet{Int}, ::SubOpBoolean) =
+  SubFinSet(as_predicate(A) .| as_predicate(B))
+top(X::FinSet{Int}, ::SubOpBoolean) = SubFinSet(trues(length(X)))
+bottom(X::FinSet{Int}, ::SubOpBoolean) = SubFinSet(falses(length(X)))
+
+function as_predicate(A::SubFinSet)
+  f = hom(A)
+  pred = falses(length(codom(f)))
+  for x in dom(f)
+    pred[f(x)] = true
+  end
+  pred
 end
 
 end

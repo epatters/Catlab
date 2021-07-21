@@ -147,13 +147,11 @@ d2 = @acset CPortGraph begin
 end
 
 graph = to_graphviz(d)
-@test stmts(graph, Graphviz.Node, :id) ==
-  ["box1", "box2", "box3", "box4"]
+@test stmts(graph, Graphviz.Node, :id) == ["box1", "box2", "box3", "box4"]
 @test length(stmts(graph, Graphviz.Edge)) == 4
 
 graph = to_graphviz(d2)
-@test stmts(graph, Graphviz.Node, :id) ==
-  ["box1", "box2", "box3", "box4"]
+@test stmts(graph, Graphviz.Node, :id) == ["box1", "box2", "box3", "box4"]
 @test length(stmts(graph, Graphviz.Edge)) == 3
 
 # Box and port labels

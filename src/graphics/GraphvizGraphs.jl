@@ -6,7 +6,7 @@ export parse_graphviz, to_graphviz
 using StaticArrays: StaticVector, SVector
 
 using ...Present, ...Theories
-using ...Graphs
+using ...Graphs, ...CategoricalAlgebra.Subobjects
 import ..Graphviz
 
 # Property graphs
@@ -98,8 +98,8 @@ end
 """ Convert a property graph to a Graphviz graph.
 
 This method is usually more convenient than direct AST manipulation for creating
-Graphviz graphs. For more advanced features, like nested subgraphs, you must use
-the Graphviz AST directly.
+simple Graphviz graphs. For more advanced features, like nested subgraphs, you
+must use the Graphviz AST.
 """
 function to_graphviz(g::AbstractPropertyGraph)::Graphviz.Graph
   gv_name(v::Int) = "n$v"
@@ -135,13 +135,21 @@ end
 # Graphs
 ########
 
+# FIXME: Should be an abstract type after StructACSets refactor.
+const IsGraph = Union{AbstractGraph, AbstractSymmetricGraph,
+                      AbstractReflexiveGraph, AbstractSymmetricReflexiveGraph}
+
 """ Convert a graph to a Graphviz graph.
 
 A simple default style is applied. For more control over the visual appearance,
 first convert the graph to a property graph, define the Graphviz attributes as
 needed, and then convert to a Graphviz graph.
 """
-function to_graphviz(g::AbstractGraph;
+function to_graphviz(g::IsGraph; kw...)
+  to_graphviz(to_graphviz_property_graph(g; kw...))
+end
+
+function to_graphviz_property_graph(g::AbstractGraph;
     prog::AbstractString="dot", graph_attrs::AbstractDict=Dict(),
     node_attrs::AbstractDict=Dict(), edge_attrs::AbstractDict=Dict(),
     node_labels::Bool=false, edge_labels::Bool=false)
@@ -151,12 +159,12 @@ function to_graphviz(g::AbstractGraph;
   else
     Dict{Symbol,String}()
   end
-  to_graphviz(PropertyGraph{Any}(g, node_labeler, edge_labeler;
+  PropertyGraph{Any}(g, node_labeler, edge_labeler;
     prog = prog,
     graph = merge!(Dict(:rankdir => "LR"), graph_attrs),
     node = merge!(default_node_attrs(node_labels), node_attrs),
     edge = merge!(Dict(:arrowsize => "0.5"), edge_attrs),
-  ))
+  )
 end
 
 default_node_attrs(show_labels::Bool) = Dict(
@@ -169,7 +177,7 @@ default_node_attrs(show_labels::Bool) = Dict(
 # Symmetric graphs
 ##################
 
-function to_graphviz(g::AbstractSymmetricGraph;
+function to_graphviz_property_graph(g::AbstractSymmetricGraph;
     prog::AbstractString="neato", graph_attrs::AbstractDict=Dict(),
     node_attrs::AbstractDict=Dict(), edge_attrs::AbstractDict=Dict(),
     node_labels::Bool=false, edge_labels::Bool=false)
@@ -180,18 +188,18 @@ function to_graphviz(g::AbstractSymmetricGraph;
   else
     Dict{Symbol,String}()
   end
-  to_graphviz(SymmetricPropertyGraph{Any}(g, node_labeler, edge_labeler;
+  SymmetricPropertyGraph{Any}(g, node_labeler, edge_labeler;
     prog = prog,
     graph = graph_attrs,
     node = merge!(default_node_attrs(node_labels), node_attrs),
     edge = merge!(Dict(:len => "0.5"), edge_attrs),
-  ))
+  )
 end
 
 # Reflexive graphs
 ##################
 
-function to_graphviz(g::AbstractReflexiveGraph;
+function to_graphviz_property_graph(g::AbstractReflexiveGraph;
     prog::AbstractString="dot", graph_attrs::AbstractDict=Dict(),
     node_attrs::AbstractDict=Dict(), edge_attrs::AbstractDict=Dict(),
     node_labels::Bool=false, edge_labels::Bool=false,
@@ -213,13 +221,13 @@ function to_graphviz(g::AbstractReflexiveGraph;
       if edge_labels; set_eprop!(pg, e′, :label, string(e)) end
     end
   end
-  to_graphviz(pg)
+  pg
 end
 
 # Symmetric reflexive graphs
 ############################
 
-function to_graphviz(g::AbstractSymmetricReflexiveGraph;
+function to_graphviz_property_graph(g::AbstractSymmetricReflexiveGraph;
     prog::AbstractString="neato", graph_attrs::AbstractDict=Dict(),
     node_attrs::AbstractDict=Dict(), edge_attrs::AbstractDict=Dict(),
     node_labels::Bool=false, edge_labels::Bool=false,
@@ -243,13 +251,16 @@ function to_graphviz(g::AbstractSymmetricReflexiveGraph;
       if edge_labels; set_eprop!(pg, e′, :label, "($e,$(inv(g,e)))") end
     end
   end
-  to_graphviz(pg)
+  pg
 end
 
 # Half-edge graphs
 ##################
 
-function to_graphviz(g::AbstractHalfEdgeGraph;
+to_graphviz(g::AbstractHalfEdgeGraph; kw...) =
+  to_graphviz(to_graphviz_property_graph(g; kw...))
+
+function to_graphviz_property_graph(g::AbstractHalfEdgeGraph;
     prog::AbstractString="neato", graph_attrs::AbstractDict=Dict(),
     node_attrs::AbstractDict=Dict(), edge_attrs::AbstractDict=Dict(),
     node_labels::Bool=false, edge_labels::Bool=false)
@@ -273,16 +284,37 @@ function to_graphviz(g::AbstractHalfEdgeGraph;
       if edge_labels; set_eprop!(pg, e′, :label, "($e,$(inv(g,e)))") end
     end
   end
-  to_graphviz(pg)
+  pg
+end
+
+# Subgraphs
+###########
+
+to_graphviz(subgraph::Subobject{<:IsGraph}; kw...) =
+  to_graphviz(to_graphviz_property_graph(subgraph; kw...))
+
+function to_graphviz_property_graph(
+    subgraph::Subobject{<:Union{AbstractGraph,AbstractSymmetricGraph}};
+    subgraph_node_attrs::AbstractDict=Dict(:color => "cornflowerblue"),
+    subgraph_edge_attrs::AbstractDict=Dict(:color => "cornflowerblue"), kw...)
+  pg = to_graphviz_property_graph(ob(subgraph); kw...)
+  f = hom(subgraph)
+  for v in vertices(dom(f))
+    set_vprops!(pg, f[:V](v), subgraph_node_attrs)
+  end
+  for e in edges(dom(f))
+    set_eprops!(pg, f[:E](e), subgraph_edge_attrs)
+  end
+  pg
 end
 
 # Schemas
 #########
 
+to_graphviz(pres::Presentation{Schema}) =
+  to_graphviz(to_graphviz_property_graph(pres))
 
-""" Construct a graph representing the schema
-"""
-function to_graphviz_graph(pres::Presentation{Schema})
+function to_graphviz_property_graph(pres::Presentation{Schema})
   obs,homs,datas,attrs = generators.(Ref(pres), [:Ob,:Hom,:Data,:Attr])
   g = PropertyGraph{Any}()
 
@@ -319,7 +351,5 @@ function to_graphviz_graph(pres::Presentation{Schema})
 
   g
 end
-
-to_graphviz(pres::Presentation{Schema}) = to_graphviz(to_graphviz_graph(pres))
 
 end

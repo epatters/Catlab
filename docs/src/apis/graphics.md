@@ -2,11 +2,11 @@
 
 ```@autodocs
 Modules = [
+  Graphics.GraphvizGraphs,
   Graphics.ComposeWiringDiagrams,
   Graphics.GraphvizWiringDiagrams,
   Graphics.TikZWiringDiagrams,
   Graphics.WiringDiagramLayouts,
-  Graphics.YFilesWiringDiagrams,
 ]
 Private = false
 ```

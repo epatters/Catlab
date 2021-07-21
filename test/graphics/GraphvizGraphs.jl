@@ -4,6 +4,7 @@ import JSON
 
 using Catlab.Graphs, Catlab.Graphics.GraphvizGraphs
 import Catlab.Graphics: Graphviz
+using Catlab.CategoricalAlgebra.Subobjects
 
 function stmts(graph::Graphviz.Graph, type::Type)
   [ stmt for stmt in graph.stmts if stmt isa type ]
@@ -138,5 +139,16 @@ add_dangling_edges!(g, [1,2])
 gv = to_graphviz(g, node_labels=true, edge_labels=true)
 @test stmts(gv, Graphviz.Node, :label) == ["1", "2", "", ""]
 @test stmts(gv, Graphviz.Edge, :label) == ["(1,2)", "3", "4"]
+
+# Subgraphs
+###########
+
+g = path_graph(Graph, 3)
+subgraph = Subobject(g, V=[2,3], E=[1])
+gv = to_graphviz(subgraph)
+@test length(stmts(gv, Graphviz.Node)) == 3
+@test length(stmts(gv, Graphviz.Edge)) == 2
+@test length(stmts(gv, Graphviz.Node, :color)) == 2
+@test length(stmts(gv, Graphviz.Edge, :color)) == 1
 
 end

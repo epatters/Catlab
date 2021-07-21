@@ -624,6 +624,9 @@ inverse_rank_dir(rank_dir::String) = @match rank_dir begin
   "RL" => RightToLeft
 end
 
+# CPG drawing
+#############
+
 """ Draw a circular port graph using Graphviz.
 
 Creates a Graphviz graph. Ports are currently not respected in the image, but
@@ -638,9 +641,8 @@ the port index for each box can be displayed to provide clarification.
 - `node_attrs=Dict()`: top-level node attributes
 - `edge_attrs=Dict()`: top-level edge attributes
 
-# TODO:
-The lack of ports might be able to be resolved by introducing an extra node per
-port which is connected to its box with an edge of length 0.
+TODO: The lack of ports might be able to be resolved by introducing an extra
+node per port which is connected to its box with an edge of length 0.
 """
 function to_graphviz(cp::CPortGraph; kw...)::Graphviz.Graph
   to_graphviz(to_graphviz_property_graph(cp; kw...))
@@ -651,8 +653,6 @@ function to_graphviz_property_graph(cp::CPortGraph;
     box_labels::Bool=false, port_labels::Bool=false,
     graph_attrs::AbstractDict=Dict(), node_attrs::AbstractDict=Dict(),
     edge_attrs::AbstractDict=Dict())
-  default_attrs = default_undirected_graphviz_attrs
-
   # Generate a map from the global index of a port to the box-specific index
   port2box = Array{Tuple{Int, Int}}(undef, nparts(cp, :Port))
   for (b, p) in enumerate(incident(cp, 1:nparts(cp, :Box), :box))
@@ -660,28 +660,24 @@ function to_graphviz_property_graph(cp::CPortGraph;
   end
 
   g′ = Graphs.Graph()
-
   migrate!(g′, cp, Dict(:V=>:Box, :E=>:Wire),
-                   Dict(:src => [:src, :box],
-                        :tgt => [:tgt, :box]))
+                   Dict(:src => [:src, :box], :tgt => [:tgt, :box]))
 
   node_labeler(v) = box_labels ? Dict(:id => "box$v", :label => string(v)) :
                                  Dict(:id => "box$v")
-
   edge_labeler(e) =
     port_labels ? Dict(:taillabel => string(port2box[cp[e, :src]][2]),
                        :headlabel => string(port2box[cp[e, :tgt]][2]),
                        :id => "edge$e") :
                   Dict(:id => "edge$e")
 
+  default_attrs = default_undirected_graphviz_attrs
   Graphs.PropertyGraph{Any}(g′, node_labeler, edge_labeler;
-    name = graph_name,
-		prog = prog,
-		node = merge(default_attrs.node, node_attrs),
+    name = graph_name, prog = prog,
+    node = merge(default_attrs.node, node_attrs),
     graph = merge(default_attrs.graph, Graphviz.as_attributes(graph_attrs)),
-		edge = merge(default_attrs.edge, Graphviz.as_attributes(edge_attrs))
-)
+    edge = merge(default_attrs.edge, Graphviz.as_attributes(edge_attrs))
+  )
 end
-
 
 end
